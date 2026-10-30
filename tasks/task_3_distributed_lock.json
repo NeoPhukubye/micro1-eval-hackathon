@@ -1,0 +1,5 @@
+{
+  "task_id": "task_3_distributed_lock",
+  "title": "Hierarchical Deadlock-Safe Lock Manager",
+  "prompt": "Implement a multi-resource lock manager in Java inside a class named `HierarchicalLockManager`. Requirements:\n1. Method: `boolean acquireLocks(List<String> resourceIds, long timeoutMs)`.\n2. Method: `void releaseLocks(List<String> resourceIds)`.\n3. Strict Constraints:\n- Must acquire multiple locks without risking deadlocks under heavy concurrent access by opposing threads.\n- Must enforce global deterministic lock acquisition ordering (e.g., sorting resource IDs lexicographically).\n- Must handle timeouts safely and release acquired partial locks if acquisition fails."
+}
