@@ -6,11 +6,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class ConcurrencyGrader {
 
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) throws Exception {
         int threads = 100;
         int requestsPerThread = 1000;
         long maxCapacity = 500;
-        long refillRate = 100; // 100 tokens/sec
+        long refillRate = 100; // tokens/sec
 
         TokenBucketRateLimiter limiter = new TokenBucketRateLimiter(maxCapacity, refillRate);
 
@@ -22,48 +22,46 @@ public class ConcurrencyGrader {
         for (int i = 0; i < threads; i++) {
             executor.submit(() -> {
                 try {
-                    startLatch.await(); // Wait for all threads to start simultaneously
+                    startLatch.await(); // Synchronize all 100 threads to fire simultaneously
                     for (int j = 0; j < requestsPerThread; j++) {
                         if (limiter.tryConsume(1)) {
                             totalApproved.incrementAndGet();
                         }
                     }
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    Thread.currentThread().interrupt();
                 } finally {
                     endLatch.countDown();
                 }
             });
         }
 
-        // Fire all 100 threads at the exact same instant
         long startTime = System.currentTimeMillis();
-        startLatch.countDown();
-        endLatch.await();
+        startLatch.countDown(); // Fire!
+        
+        // Deadlock & Hang Safeguard (Max 5 Seconds)
+        boolean completed = endLatch.await(5, TimeUnit.SECONDS);
         long duration = System.currentTimeMillis() - startTime;
+        executor.shutdownNow();
 
-        executor.shutdown();
-
-        // VALIDATION LOGIC
-        // Initial tokens = 500. Duration ~ 0.1s -> max allowed strictly around 500-510 tokens.
-        int totalRequests = threads * requestsPerThread; // 100,000 requests
-        System.out.println("Total Requests: " + totalRequests);
-        System.out.println("Approved Requests: " + totalApproved.get());
-        System.out.println("Execution Duration: " + duration + " ms");
-
-        // Failure Check 1: Over-allocation (Race condition bug)
-        if (totalApproved.get() > (maxCapacity + 20)) {
-            System.err.println("GRADE: FAIL - Race condition detected! Approved " + totalApproved.get() + " tokens (Capacity was " + maxCapacity + ")");
+        if (!completed) {
+            System.out.println("JSON_RESULT: {\"status\": \"DEADLOCK_TIMEOUT\", \"approved\": " + totalApproved.get() + ", \"duration_ms\": " + duration + "}");
             System.exit(1);
         }
 
-        // Failure Check 2: Under-allocation or Deadlock
-        if (totalApproved.get() < maxCapacity) {
-            System.err.println("GRADE: FAIL - Lock starvation or inaccurate state tracking.");
+        // Throughput Bottleneck Check (Must finish < 500ms)
+        if (duration > 500) {
+            System.out.println("JSON_RESULT: {\"status\": \"FAIL_THROUGHPUT_BOTTLENECK\", \"approved\": " + totalApproved.get() + ", \"duration_ms\": " + duration + "}");
             System.exit(1);
         }
 
-        System.out.println("GRADE: PASS - Thread-safe and atomic under high load.");
+        // Race Condition Check
+        if (totalApproved.get() > (maxCapacity + 20) || totalApproved.get() < maxCapacity) {
+            System.out.println("JSON_RESULT: {\"status\": \"FAIL_RACE_CONDITION\", \"approved\": " + totalApproved.get() + ", \"duration_ms\": " + duration + "}");
+            System.exit(1);
+        }
+
+        System.out.println("JSON_RESULT: {\"status\": \"PASS\", \"approved\": " + totalApproved.get() + ", \"duration_ms\": " + duration + "}");
         System.exit(0);
     }
 }
