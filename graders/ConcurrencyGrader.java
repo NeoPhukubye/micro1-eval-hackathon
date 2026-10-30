@@ -22,7 +22,7 @@ public class ConcurrencyGrader {
         for (int i = 0; i < threads; i++) {
             executor.submit(() -> {
                 try {
-                    startLatch.await(); // Synchronize all 100 threads to fire simultaneously
+                    startLatch.await(); // Synchronize all 100 threads to fire at once
                     for (int j = 0; j < requestsPerThread; j++) {
                         if (limiter.tryConsume(1)) {
                             totalApproved.incrementAndGet();
@@ -37,9 +37,9 @@ public class ConcurrencyGrader {
         }
 
         long startTime = System.currentTimeMillis();
-        startLatch.countDown(); // Fire!
-        
-        // Deadlock & Hang Safeguard (Max 5 Seconds)
+        startLatch.countDown(); // Fire simultaneous requests
+
+        // Hard 5-Second Timeout Guard (Detects Thread Deadlocks)
         boolean completed = endLatch.await(5, TimeUnit.SECONDS);
         long duration = System.currentTimeMillis() - startTime;
         executor.shutdownNow();
@@ -49,13 +49,13 @@ public class ConcurrencyGrader {
             System.exit(1);
         }
 
-        // Throughput Bottleneck Check (Must finish < 500ms)
+        // Performance Bottleneck Check (Rejects coarse synchronized solutions)
         if (duration > 500) {
             System.out.println("JSON_RESULT: {\"status\": \"FAIL_THROUGHPUT_BOTTLENECK\", \"approved\": " + totalApproved.get() + ", \"duration_ms\": " + duration + "}");
             System.exit(1);
         }
 
-        // Race Condition Check
+        // Race Condition Check (Over or Under Allocation)
         if (totalApproved.get() > (maxCapacity + 20) || totalApproved.get() < maxCapacity) {
             System.out.println("JSON_RESULT: {\"status\": \"FAIL_RACE_CONDITION\", \"approved\": " + totalApproved.get() + ", \"duration_ms\": " + duration + "}");
             System.exit(1);
