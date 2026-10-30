@@ -1,1 +1,1 @@
-model,pass_rate,pass_at_k,pass_pow_k
+model,task,pass_rate,pass_at_k,pass_pow_k,trials_passed
