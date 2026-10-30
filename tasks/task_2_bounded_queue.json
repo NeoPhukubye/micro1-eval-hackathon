@@ -1,0 +1,5 @@
+{
+  "task_id": "task_2_bounded_queue",
+  "title": "Lock-Free Bounded MPSC Queue",
+  "prompt": "Implement a high-performance, lock-free Multi-Producer Single-Consumer (MPSC) bounded queue in Java inside a class named `BoundedMpscQueue<E>` implementing `Queue<E>`. Requirements:\n1. Constructor: `BoundedMpscQueue(int capacity)` where capacity is a power of 2.\n2. Methods: `boolean offer(E element)` and `E poll()`.\n3. Strict Constraints:\n- Must be thread-safe for multiple concurrent offer() threads and a single poll() thread.\n- Must NOT use `synchronized`, `ReentrantLock`, or blocking collections.\n- Must handle sequence wrap-around and memory visibility correctly using `AtomicReferenceArray` or VarHandles."
+}
