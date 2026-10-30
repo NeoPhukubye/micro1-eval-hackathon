@@ -1,0 +1,6 @@
+{
+  "task_id": "task_1_token_bucket",
+  "name": "Token Bucket Rate Limiter",
+  "description": "Implement a thread-safe token bucket rate limiter in Java",
+  "prompt": "Implement a thread-safe token bucket rate limiter in Java inside a class named `TokenBucketRateLimiter` implementing the provided `RateLimiter` interface.\n\nRequirements:\n1. Constructor: `TokenBucketRateLimiter(long maxCapacity, long refillRatePerSecond)`\n2. Method: `boolean tryConsume(long tokens)`\n- Returns `true` if `tokens` were successfully consumed, `false` otherwise.\n- Token replenishment must reflect elapsed time continuously (lock-free or fine-grained locking preferred).\n\nStrict Constraints:\n- Must support high-concurrency access across hundreds of threads without blocking or causing lock contention deadlocks.\n- Must never allow available tokens to exceed `maxCapacity` or drop below `0`.\n- Must not use coarse-grained `synchronized` methods that wrap the entire `tryConsume` operation, as this chokes throughput.\n- Must handle clock skew or nanoTime overflow safely."
+}
