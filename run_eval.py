@@ -6,12 +6,17 @@ import time
 from pathlib import Path
 from openai import OpenAI
 
-MODELS = ["gpt-4o", "claude-3-5-sonnet", "llama-3.1-70b"]
-TASKS = ["task_1_token_bucket.json", "task_2_bounded_queue.json", "task_3_distributed_lock.json"]
-TRIALS = 3  # 3 trials per task per model = 27 total runs
+MODELS = ["gpt-4o", "claude-3-5-sonnet"]
+TASKS = [
+    {"json": "task_1_token_bucket.json", "class": "TokenBucketRateLimiter", "grader": "ConcurrencyGrader"},
+    {"json": "task_2_bounded_queue.json", "class": "BoundedMpscQueue", "grader": "BoundedQueueGrader"},
+    {"json": "task_3_distributed_lock.json", "class": "HierarchicalLockManager", "grader": "LockManagerGrader"}
+]
+TRIALS = 3
 
-def run_single_trial(model_name, task_file, trial_num):
-    print(f"Executing {model_name} | {task_file} | Trial {trial_num}...")
+def run_single_trial(model_name, task_info, trial_num):
+    task_file = task_info["json"]
+    print(f"--> Executing {model_name} | {task_file} | Trial {trial_num}/3...")
     
     # 1. Load Task
     with open(f"tasks/{task_file}") as f:
@@ -26,10 +31,10 @@ def run_single_trial(model_name, task_file, trial_num):
     )
     raw_output = response.choices[0].message.content
 
-    # Save Log File in transcripts/
-    log_filename = f"transcripts/{model_name}_{task_data['task_id']}_trial{trial_num}.log"
+    # Save log to transcripts/
+    log_name = f"transcripts/{model_name}_{task_data['task_id']}_trial{trial_num}.log"
     os.makedirs("transcripts", exist_ok=True)
-    with open(log_filename, "w") as f:
+    with open(log_name, "w") as f:
         f.write(raw_output)
 
     # 3. Extract Java Code
@@ -38,24 +43,22 @@ def run_single_trial(model_name, task_file, trial_num):
     except IndexError:
         return "FAIL_FORMATTING", 0
 
-    # Write Java file to build directory
-    target_path = Path("src/main/java/com/eval/ratelimiter/TokenBucketRateLimiter.java")
+    target_path = Path(f"src/main/java/com/eval/ratelimiter/{task_info['class']}.java")
     target_path.parent.mkdir(parents=True, exist_ok=True)
     target_path.write_text(java_code)
 
-    # 4. Compile Maven Project
+    # 4. Compile Project
     compile_proc = subprocess.run(["mvn", "clean", "test-compile"], capture_output=True, text=True)
     if compile_proc.returncode != 0:
         return "FAIL_COMPILATION", 0
 
-    # 5. Run Concurrency Grader
+    # 5. Run Matching Grader
     run_proc = subprocess.run(
-        ["java", "-cp", "target/classes:target/test-classes", "com.eval.grader.ConcurrencyGrader"],
+        ["java", "-cp", "target/classes:target/test-classes", f"com.eval.grader.{task_info['grader']}"],
         capture_output=True,
         text=True
     )
 
-    # Parse Results
     for line in run_proc.stdout.splitlines():
         if "JSON_RESULT:" in line:
             res_data = json.loads(line.replace("JSON_RESULT:", "").strip())
@@ -69,22 +72,18 @@ def main():
     for model in MODELS:
         for task in TASKS:
             passes = 0
-            durations = []
-            
             for t in range(1, TRIALS + 1):
                 status, duration = run_single_trial(model, task, t)
                 if status == "PASS":
                     passes += 1
-                durations.append(duration)
 
             pass_at_k = 1.0 if passes > 0 else 0.0
             pass_pow_k = 1.0 if passes == TRIALS else 0.0
-            pass_rate = (passes / TRIALS) * 100
 
             summary_results.append({
                 "model": model,
-                "task": task,
-                "pass_rate": f"{pass_rate:.1f}%",
+                "task": task["json"],
+                "pass_rate": f"{(passes/TRIALS)*100:.1f}%",
                 "pass_at_k": pass_at_k,
                 "pass_pow_k": pass_pow_k,
                 "trials_passed": f"{passes}/{TRIALS}"
@@ -97,7 +96,7 @@ def main():
         for r in summary_results:
             f.write(f"{r['model']},{r['task']},{r['pass_rate']},{r['pass_at_k']},{r['pass_pow_k']},{r['trials_passed']}\n")
 
-    print("\nSummary Results Saved to results/summary.csv")
+    print("\n✅ Benchmark Complete. Results written to results/summary.csv")
 
 if __name__ == "__main__":
     main()
